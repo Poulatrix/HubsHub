@@ -1,0 +1,173 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user profile within a family context",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["parent", "child"] },
+        "pin": { "type": "string", "description": "4-digit security PIN for parent profiles" },
+        "familyIds": { "type": "array", "items": { "type": "string" } },
+        "lastActiveFamilyId": { "type": "string" },
+        "dashboardLayout": { "type": "array" }
+      },
+      "required": ["uid", "displayName"]
+    },
+    "Invitation": {
+      "title": "Invitation",
+      "description": "An invitation to join a family",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "familyId": { "type": "string" },
+        "familyName": { "type": "string" },
+        "invitedBy": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] }
+      },
+      "required": ["email", "familyId", "status"]
+    },
+    "FamilyGroup": {
+      "title": "FamilyGroup",
+      "description": "A group of family members",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "adminUids": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "adminUids"]
+    },
+    "WallMessage": {
+      "title": "WallMessage",
+      "description": "A message on the family wall",
+      "type": "object",
+      "properties": {
+        "content": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["content", "authorUid", "timestamp"]
+    },
+    "ShoppingItem": {
+      "title": "ShoppingItem",
+      "description": "An item in the shopping list",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string" },
+        "checked": { "type": "boolean" },
+        "authorUid": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "checked", "timestamp"]
+    },
+    "CalendarSource": {
+      "title": "CalendarSource",
+      "description": "An external calendar source",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["google", "outlook", "ical"] },
+        "url": { "type": "string" },
+        "color": { "type": "string" },
+        "logoUrl": { "type": "string" }
+      },
+      "required": ["name", "type"]
+    },
+    "CalendarEvent": {
+      "title": "CalendarEvent",
+      "description": "A family event",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "location": { "type": "string" },
+        "start": { "type": "string", "format": "date-time" },
+        "end": { "type": "string", "format": "date-time" },
+        "allDay": { "type": "boolean" },
+        "memberUid": { "type": "string", "description": "The family member this event belongs to" },
+        "authorUid": { "type": "string" },
+        "color": { "type": "string" },
+        "sourceId": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["title", "start", "end"]
+    },
+    "TodoTask": {
+      "title": "TodoTask",
+      "description": "A task in the family todo list",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "assignedToIds": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["todo", "in-progress", "done"] },
+        "deadline": { "type": "string", "format": "date-time" },
+        "recurring": { "type": "string", "enum": ["none", "daily", "weekly"] },
+        "isUrgent": { "type": "boolean" },
+        "showAfter": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "completedById": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "assignedToIds", "status", "createdAt"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "An activity log entry for the family",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "type": { "type": "string", "enum": ["shopping", "task", "calendar", "wall", "profile"] },
+        "action": { "type": "string", "enum": ["create", "update", "delete", "complete", "join"] },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "userId", "type", "action", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/families/{familyId}": {
+      "schema": "FamilyGroup",
+      "description": "Family group settings"
+    },
+    "/families/{familyId}/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles within a family"
+    },
+    "/families/{familyId}/wall/{messageId}": {
+      "schema": "WallMessage",
+      "description": "Wall messages for a family"
+    },
+    "/families/{familyId}/shopping/{itemId}": {
+      "schema": "ShoppingItem",
+      "description": "Shopping list items for a family"
+    },
+    "/families/{familyId}/calendar_sources/{sourceId}": {
+      "schema": "CalendarSource",
+      "description": "External calendar sources"
+    },
+    "/families/{familyId}/events/{eventId}": {
+      "schema": "CalendarEvent",
+      "description": "Aggregated calendar events"
+    },
+    "/families/{familyId}/todos/{taskId}": {
+      "schema": "TodoTask",
+      "description": "To-do list tasks"
+    },
+    "/families/{familyId}/activities/{activityId}": {
+      "schema": "Activity",
+      "description": "Family activity logs"
+    }
+  }
+}

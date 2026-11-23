@@ -1,0 +1,8 @@
+{
+  "name": "FamilyHub",
+  "description": "Un hub familial centralisé avec messagerie, liste de courses et raccourcis vers vos SAAS préférés.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": []
+}

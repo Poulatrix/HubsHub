@@ -1,0 +1,200 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: /families/{familyId}
+    // Fields:
+    //   - name: string (required)
+    //   - adminUids: list (required)
+    //
+    // Collection: /families/{familyId}/users/{userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - displayName: string
+    //   - email: string
+    //   - role: string (required, ['parent', 'child'])
+    //   - familyIds: list
+    //
+    // Collection: /families/{familyId}/wall/{messageId}
+    // Fields:
+    //   - content: string (required, max 500)
+    //   - authorUid: string (required)
+    //   - authorName: string
+    //   - timestamp: timestamp (required)
+    //
+    // Collection: /families/{familyId}/shopping/{itemId}
+    // Fields:
+    //   - text: string (required, max 100)
+    //   - completed: bool (required)
+    //   - addedByUid: string
+    //   - timestamp: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && 
+             'email' in request.auth.token && 
+             request.auth.token.email != null &&
+             request.auth.token.email.lower() == "n.hubert7700@gmail.com";
+    }
+
+    function getUserData(familyId, userId) {
+      return get(/databases/$(database)/documents/families/$(familyId)/users/$(userId)).data;
+    }
+
+    function isParent(familyId) {
+      return isAuthenticated() && (
+        isSuperAdmin() ||
+        (exists(/databases/$(database)/documents/families/$(familyId)) && 
+         request.auth.uid in get(/databases/$(database)/documents/families/$(familyId)).data.adminUids) ||
+        (exists(/databases/$(database)/documents/families/$(familyId)/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/families/$(familyId)/users/$(request.auth.uid)).data.role == 'parent')
+      );
+    }
+
+    function isFamilyMember(familyId) {
+      return isAuthenticated() && (
+        isSuperAdmin() ||
+        (exists(/databases/$(database)/documents/families/$(familyId)) && 
+         request.auth.uid in get(/databases/$(database)/documents/families/$(familyId)).data.adminUids) ||
+        exists(/databases/$(database)/documents/families/$(familyId)/users/$(request.auth.uid))
+      );
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'role']) &&
+             data.uid is string &&
+             data.role in ['parent', 'child'];
+    }
+
+    function isValidInvitation(data) {
+      return data.keys().hasAll(['email', 'familyId', 'status']) &&
+             data.email is string &&
+             data.familyId is string &&
+             data.status in ['pending', 'accepted', 'declined'];
+    }
+
+    function isValidWallMessage(data) {
+      return data.keys().hasAll(['content', 'authorUid', 'timestamp']) &&
+             data.content is string && data.content.size() > 0 && data.content.size() <= 1000 &&
+             data.authorUid is string &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidShoppingItem(data) {
+      return data.keys().hasAll(['name', 'checked', 'timestamp']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.checked is bool &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidTodoTask(data) {
+      return data.keys().hasAll(['title', 'assignedToIds', 'status', 'createdAt']) &&
+             data.title is string &&
+             data.assignedToIds is list &&
+             data.status in ['todo', 'in-progress', 'done'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidActivity(data) {
+      return data.keys().hasAll(['familyId', 'userId', 'type', 'action', 'timestamp']) &&
+             data.familyId is string &&
+             data.userId is string &&
+             data.type in ['shopping', 'task', 'calendar', 'wall', 'profile'] &&
+             data.action in ['create', 'update', 'delete', 'complete', 'join'] &&
+             data.timestamp is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /invitations/{inviteId} {
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        ('email' in request.auth.token && request.auth.token.email != null && request.auth.token.email.lower() == resource.data.email.lower()) || 
+        isParent(resource.data.familyId)
+      );
+      allow create: if isAuthenticated() && isValidInvitation(request.resource.data) && isParent(request.resource.data.familyId);
+      allow update: if isAuthenticated() && ('email' in request.auth.token && request.auth.token.email != null && request.auth.token.email.lower() == resource.data.email.lower()) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if isAuthenticated() && (isSuperAdmin() || ('email' in request.auth.token && request.auth.token.email != null && request.auth.token.email.lower() == resource.data.email.lower()) || isParent(resource.data.familyId));
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    match /families/{familyId} {
+      allow get: if isFamilyMember(familyId);
+      allow list: if isAuthenticated(); 
+      allow create: if isAuthenticated() && 
+                    request.resource.data.keys().hasAll(['name', 'adminUids', 'createdAt']) &&
+                    request.resource.data.name is string &&
+                    request.resource.data.adminUids is list &&
+                    request.auth.uid in request.resource.data.adminUids;
+      allow update: if isParent(familyId);
+      allow delete: if isParent(familyId);
+
+      match /users/{userId} {
+        allow read: if isFamilyMember(familyId);
+        
+        allow create: if isAuthenticated() && (
+          (request.auth.uid == userId && request.resource.data.role == 'parent') || 
+          isParent(familyId)
+        );
+        
+        allow update: if isAuthenticated() && (
+          (request.auth.uid == userId && (request.resource.data.role == resource.data.role || !('role' in request.resource.data))) || 
+          isParent(familyId)
+        );
+      }
+
+      match /wall/{messageId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isFamilyMember(familyId) && isValidWallMessage(request.resource.data);
+        allow delete: if isParent(familyId) || (isFamilyMember(familyId) && resource.data.authorUid == request.auth.uid);
+      }
+
+      match /shopping/{itemId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isFamilyMember(familyId) && isValidShoppingItem(request.resource.data);
+        allow update: if isFamilyMember(familyId) && isValidShoppingItem(request.resource.data);
+        allow delete: if isFamilyMember(familyId);
+      }
+
+      match /calendar_sources/{sourceId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if isParent(familyId);
+      }
+
+      match /events/{eventId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if isFamilyMember(familyId);
+      }
+
+      match /todos/{taskId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isFamilyMember(familyId) && isValidTodoTask(request.resource.data);
+        allow update: if isFamilyMember(familyId) && isValidTodoTask(request.resource.data);
+        allow delete: if isFamilyMember(familyId);
+      }
+
+      match /activities/{activityId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isFamilyMember(familyId) && isValidActivity(request.resource.data);
+      }
+    }
+  }
+}
